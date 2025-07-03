@@ -4,4 +4,6 @@ install git
 
 git clone https://github.com/0rffo9/Dodger-game.git
 
-and the game in in the folder
+go into Dodger-game and run Dodger.html
+
+HAVE FUN!
