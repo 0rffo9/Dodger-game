@@ -1,43 +1,4 @@
-<script type="text/javascript">
-        var gk_isXlsx = false;
-        var gk_xlsxFileLookup = {};
-        var gk_fileData = {};
-        function filledCell(cell) {
-          return cell !== '' && cell != null;
-        }
-        function loadFileData(filename) {
-        if (gk_isXlsx && gk_xlsxFileLookup[filename]) {
-            try {
-                var workbook = XLSX.read(gk_fileData[filename], { type: 'base64' });
-                var firstSheetName = workbook.SheetNames[0];
-                var worksheet = workbook.Sheets[firstSheetName];
-
-                // Convert sheet to JSON to filter blank rows
-                var jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, blankrows: false, defval: '' });
-                // Filter out blank rows (rows where all cells are empty, null, or undefined)
-                var filteredData = jsonData.filter(row => row.some(filledCell));
-
-                // Heuristic to find the header row by ignoring rows with fewer filled cells than the next row
-                var headerRowIndex = filteredData.findIndex((row, index) =>
-                  row.filter(filledCell).length >= filteredData[index + 1]?.filter(filledCell).length
-                );
-                // Fallback
-                if (headerRowIndex === -1 || headerRowIndex > 25) {
-                  headerRowIndex = 0;
-                }
-
-                // Convert filtered JSON back to CSV
-                var csv = XLSX.utils.aoa_to_sheet(filteredData.slice(headerRowIndex)); // Create a new sheet from filtered array of arrays
-                csv = XLSX.utils.sheet_to_csv(csv, { header: 1 });
-                return csv;
-            } catch (e) {
-                console.error(e);
-                return "";
-            }
-        }
-        return gk_fileData[filename] || "";
-        }
-        </script><!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -56,7 +17,7 @@
             display: flex;
             justify-content: center;
             align-items: center;
-            background-color: #1a202c;
+            background-color: #000; /* Pure black */
             color: #e2e8f0;
             padding: 0;
         }
@@ -75,7 +36,7 @@
             box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
             width: 100%;
             height: 100%;
-            object-fit: contain;
+            /* object-fit: contain; <--- This line has been removed */
         }
         .message-box {
             position: absolute;
@@ -150,14 +111,7 @@
         .overlay-screen button:hover {
             background-color: #45a049;
         }
-        #easyMode { background-color: #4CAF50; }
-        #easyMode:hover { background-color: #45a049; }
-        #normalMode { background-color: #2196F3; }
-        #normalMode:hover { background-color: #0b7dda; }
-        #hardMode { background-color: #FF9800; }
-        #hardMode:hover { background-color: #fb8c00; }
-        #impossibleMode { background-color: #f44336; }
-        #impossibleMode:hover { background-color: #da190b; }
+        /* No more specific difficulty button styles here as they are removed */
         #deleteProfileBtn { background-color: #dc2626; }
         #deleteProfileBtn:hover { background-color: #b91c1c; }
         .profile-input-group {
@@ -212,13 +166,12 @@
             <button id="createProfileBtn">Create New Profile</button>
         </div>
     </div>
-    <div id="difficultySelectScreen" class="overlay-screen" style="display: none;">
-        <h2>Choose Difficulty</h2>
-        <button id="easyMode">Easy Mode</button>
-        <button id="normalMode">Normal Mode</button>
-        <button id="hardMode">Hard Mode</button>
-        <button id="impossibleMode">Impossible Mode</button>
+    <script src="https://www.youtube.com/iframe_api"></script>
+
+    <div id="rickrollContainer" class="overlay-screen" style="display: none;">
+        <iframe id="rickrollVideo" width="560" height="315" src="https://www.youtube.com/embed/dQw4w9WgXcQ?enablejsapi=1" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>
     </div>
+
     <script>
         const canvas = document.getElementById('gameCanvas');
         const ctx = canvas.getContext('2d');
@@ -242,12 +195,26 @@
         let profiles = [];
 
         const DIFFICULTY_SETTINGS = {
+            'babymode': { player_speed: 10, obstacle_speed: 2, ai_reaction_delay: 150 },
             'easy': { player_speed: 6, obstacle_speed: 4, ai_reaction_delay: 80 },
             'normal': { player_speed: 5, obstacle_speed: 5, ai_reaction_delay: 60 },
             'hard': { player_speed: 5, obstacle_speed: 6.5, ai_reaction_delay: 40 },
-            'impossible': { player_speed: 2.5, obstacle_speed: 15, ai_reaction_delay: 5 }
+            'insane': { player_speed: 2.5, obstacle_speed: 15, ai_reaction_delay: 5 },
+            'impossible': { player_speed: 2, obstacle_speed: 25, ai_reaction_delay: 1 }
         };
-        let current_difficulty_mode = 'normal';
+
+        const DIFFICULTIES_ORDER = ['babymode', 'easy', 'normal', 'hard', 'insane', 'impossible'];
+
+        const WIN_THRESHOLD_TIMES = {
+            'babymode': 120.0,
+            'easy': 90.0,
+            'normal': 60.0,
+            'hard': 40.0,
+            'insane': 25.0,
+            'impossible': 15.0
+        };
+
+        let current_difficulty_mode = 'babymode'; // Game always starts on babymode now
 
         let obstacle_color = red;
         let obstacle_x;
@@ -273,7 +240,6 @@
         const prediction_frames = 30;
 
         const GAME_STATE_PROFILE_SELECT = 0;
-        const GAME_STATE_DIFFICULTY_SELECT = 1;
         const GAME_STATE_COUNTDOWN = 2;
         const GAME_STATE_PLAYING = 3;
         const GAME_STATE_GAME_OVER = 4;
@@ -336,11 +302,39 @@
         const newProfileNameInput = document.getElementById('newProfileName');
         const createProfileBtn = document.getElementById('createProfileBtn');
 
-        const difficultySelectScreen = document.getElementById('difficultySelectScreen');
-        const easyModeBtn = document.getElementById('easyMode');
-        const normalModeBtn = document.getElementById('normalMode');
-        const hardModeBtn = document.getElementById('hardMode');
-        const impossibleModeBtn = document.getElementById('impossibleMode');
+        // YouTube Player API variables and functions
+        let player; // Global variable for the YouTube player
+        const rickrollContainer = document.getElementById('rickrollContainer'); // Get the container div
+
+        function onYouTubeIframeAPIReady() {
+            player = new YT.Player('rickrollVideo', {
+                events: {
+                    'onReady': onPlayerReady
+                }
+            });
+        }
+
+        function onPlayerReady(event) {
+            console.log("YouTube Player is ready.");
+            // No autoplay here, we'll control it with showRickroll()
+        }
+
+        function showRickroll() {
+            if (rickrollContainer && player) {
+                rickrollContainer.style.display = 'flex'; // Make it visible
+                player.playVideo(); // Play the video
+            }
+        }
+
+        function hideRickroll() {
+            if (rickrollContainer && player) {
+                rickrollContainer.style.display = 'none'; // Hide the container
+                player.pauseVideo(); // Pause the video
+                player.seekTo(0); // Rewind to start
+            }
+            // Ensure the main game canvas is visible if rickroll is hidden
+            canvas.style.display = 'block';
+        }
 
         function loadProfiles() {
             try {
@@ -397,7 +391,10 @@
             if (selectedName) {
                 current_profile = selectedName;
                 localStorage.setItem("lastSelectedProfile", current_profile);
-                showDifficultySelect();
+                profileSelectScreen.style.display = 'none'; // Hide profile screen
+                current_difficulty_mode = 'babymode'; // Start with babymode
+                applyDifficulty(current_difficulty_mode); // Apply babymode settings
+                resetGame(); // Start the game countdown
             } else {
                 showMessageBox("Please select a profile or create a new one.");
             }
@@ -419,7 +416,10 @@
             localStorage.setItem("lastSelectedProfile", current_profile);
             newProfileNameInput.value = '';
             updateProfileDropdown();
-            showDifficultySelect();
+            profileSelectScreen.style.display = 'none'; // Hide profile screen
+            current_difficulty_mode = 'babymode'; // Start with babymode
+            applyDifficulty(current_difficulty_mode); // Apply babymode settings
+            resetGame(); // Start the game countdown
         }
 
         async function deleteProfile() {
@@ -481,14 +481,8 @@
         function showProfileSelect() {
             current_game_state = GAME_STATE_PROFILE_SELECT;
             profileSelectScreen.style.display = 'flex';
-            difficultySelectScreen.style.display = 'none';
             loadProfiles();
-        }
-
-        function showDifficultySelect() {
-            current_game_state = GAME_STATE_DIFFICULTY_SELECT;
-            profileSelectScreen.style.display = 'none';
-            difficultySelectScreen.style.display = 'flex';
+            hideRickroll(); // Ensure rickroll is hidden when in profile select
         }
 
         function applyDifficulty(mode) {
@@ -497,37 +491,11 @@
             player_speed = settings.player_speed;
             obstacle_speed = settings.obstacle_speed;
             ai_reaction_delay = settings.ai_reaction_delay;
-            difficultySelectScreen.style.display = 'none';
-            resetGame();
-        }
-
-        function resetGame() {
-            player_x = screen_width / 2 - player_size / 2;
-            player_y = screen_height / 2 - player_size / 2;
-            player_vx = 0;
-            player_vy = 0;
-            obstacle_x = screen_width / 3 - obstacle_size / 2;
-            obstacle_y = screen_height / 2 - obstacle_size / 2;
-            ai_target_x = obstacle_x;
-            ai_target_y = obstacle_y;
-            ai_reaction_timer = 0;
-            countdown_timer = countdown_time_frames;
-            start_time = 0;
-            elapsed_time_ms = 0;
-            final_survival_time = 0.0;
-            is_new_high_score = false;
-            current_game_state = GAME_STATE_COUNTDOWN;
         }
 
         selectProfileBtn.onclick = selectProfile;
         createProfileBtn.onclick = createProfile;
-        deleteProfileBtn.onclick = deleteProfile; // The separate delete button's event listener
-        // Removed profileDropdown.onchange = selectProfile; to rely on explicit buttons for actions
-
-        easyModeBtn.onclick = () => applyDifficulty('easy');
-        normalModeBtn.onclick = () => applyDifficulty('normal');
-        hardModeBtn.onclick = () => applyDifficulty('hard');
-        impossibleModeBtn.onclick = () => applyDifficulty('impossible');
+        deleteProfileBtn.onclick = deleteProfile;
 
         document.addEventListener('keydown', (event) => {
             if (current_game_state === GAME_STATE_PLAYING) {
@@ -547,7 +515,8 @@
                 }
             } else if (current_game_state === GAME_STATE_GAME_OVER) {
                 if (event.key === 'r' || event.key === 'R') {
-                    showDifficultySelect();
+                    applyDifficulty(current_difficulty_mode);
+                    resetGame();
                 } else if (event.key === 'p' || event.key === 'P') {
                     showProfileSelect();
                 }
@@ -577,32 +546,49 @@
             const container = canvas.parentElement;
             const containerWidth = container.clientWidth;
             const containerHeight = container.clientHeight;
+            // The aspectRatio is no longer strictly enforced visually by object-fit: contain
+            // But we keep it here as a reference for original scaling calculation if needed
             const aspectRatio = 1366 / 694;
 
-            let newWidth = containerWidth;
-            let newHeight = containerWidth / aspectRatio;
+            // Set canvas dimensions to fill the container
+            canvas.width = containerWidth;
+            canvas.height = containerHeight;
 
-            if (newHeight > containerHeight) {
-                newHeight = containerHeight;
-                newWidth = containerHeight * aspectRatio;
-            }
-
-            canvas.width = newWidth;
-            canvas.height = newHeight;
-            screen_width = newWidth;
-            screen_height = newHeight;
+            // Update screen_width and screen_height to match actual canvas dimensions
+            screen_width = canvas.width;
+            screen_height = canvas.height;
 
             if ([GAME_STATE_COUNTDOWN, GAME_STATE_PLAYING, GAME_STATE_GAME_OVER].includes(current_game_state)) {
-                player_x = Math.min(player_x, screen_width - player_size);
-                player_y = Math.min(player_y, screen_height - player_size);
-                obstacle_x = Math.min(obstacle_x, screen_width - obstacle_size);
-                obstacle_y = Math.min(obstacle_y, screen_height - obstacle_size);
+                // Clamping to keep player and obstacle fully within the screen bounds
+                player_x = Math.max(0, Math.min(screen_width - player_size, player_x));
+                player_y = Math.max(0, Math.min(screen_height - player_size, player_y));
+                obstacle_x = Math.max(0, Math.min(screen_width - obstacle_size, obstacle_x));
+                obstacle_y = Math.max(0, Math.min(screen_height - obstacle_size, obstacle_y));
             } else {
-                resetGame();
+                resetGame(); // Ensure game is reset on resize if not actively playing
             }
         }
 
         window.addEventListener('resize', resizeCanvas);
+
+        function resetGame() {
+            hideRickroll(); // Crucial: Hide rickroll on game reset
+            // Update initial positions based on potentially new screen_width/height after resize
+            player_x = screen_width / 2 - player_size / 2;
+            player_y = screen_height - player_size; // Player starts at the bottom edge
+            obstacle_x = screen_width / 2 - obstacle_size / 2;
+            obstacle_y = 0; // Obstacle starts at the top edge
+            player_vx = 0;
+            player_vy = 0;
+            start_time = 0;
+            elapsed_time_ms = 0;
+            final_survival_time = 0.0;
+            is_new_high_score = false;
+            countdown_timer = countdown_time_frames;
+            current_game_state = GAME_STATE_COUNTDOWN;
+            applyDifficulty(current_difficulty_mode); // Apply settings for the current/next difficulty
+        }
+
 
         function gameLoop(currentTime) {
             requestAnimationFrame(gameLoop);
@@ -626,6 +612,7 @@
                     elapsed_time_ms = performance.now() - start_time;
                     player_x += player_vx;
                     player_y += player_vy;
+                    // Clamping to keep player fully within the screen bounds
                     player_x = Math.max(0, Math.min(screen_width - player_size, player_x));
                     player_y = Math.max(0, Math.min(screen_height - player_size, player_y));
 
@@ -636,6 +623,7 @@
                     if (ai_reaction_timer >= ai_reaction_delay) {
                         let predicted_player_x = player_x + (player_vx_for_ai * prediction_frames);
                         let predicted_player_y = player_y + (player_vy_for_ai * prediction_frames);
+                        // Clamp AI prediction to keep it within bounds
                         predicted_player_x = Math.max(0, Math.min(screen_width - player_size, predicted_player_x));
                         predicted_player_y = Math.max(0, Math.min(screen_height - player_size, predicted_player_y));
                         ai_target_x = predicted_player_x;
@@ -654,6 +642,7 @@
                         obstacle_y -= obstacle_speed;
                     }
 
+                    // Clamping to keep obstacle fully within the screen bounds
                     obstacle_x = Math.max(0, Math.min(screen_width - obstacle_size, obstacle_x));
                     obstacle_y = Math.max(0, Math.min(screen_height - obstacle_size, obstacle_y));
 
@@ -710,51 +699,103 @@
                 ctx.fillStyle = white;
                 const time_display = `Time: ${(elapsed_time_ms / 1000.0).toFixed(1)}s`;
                 ctx.fillText(time_display, screen_width / 2, 10);
+
+                // Display "Time left till level up" in the top right corner
+                ctx.font = '24px Inter';
                 ctx.textAlign = 'right';
                 ctx.fillStyle = gold;
-                const currentProfileHighScore = loadHighScore(current_profile, current_difficulty_mode);
-                const best_score_display = `Best (${current_difficulty_mode.toUpperCase()}): ${currentProfileHighScore.toFixed(2)}s`;
-                ctx.fillText(best_score_display, screen_width - 10, 10);
+                if (current_difficulty_mode !== 'impossible') {
+                    const timeLeft = Math.max(0, WIN_THRESHOLD_TIMES[current_difficulty_mode] - (elapsed_time_ms / 1000.0));
+                    const timeLeftDisplay = `Time left till level up: ${timeLeft.toFixed(1)}s`;
+                    ctx.fillText(timeLeftDisplay, screen_width - 10, 10);
+                } else {
+                    ctx.fillText("Final Challenge!", screen_width - 10, 10);
+                }
+
             } else if (current_game_state === GAME_STATE_GAME_OVER) {
                 const center_x = screen_width / 2;
                 const center_y = screen_height / 2;
                 const currentProfileHighScore = loadHighScore(current_profile, current_difficulty_mode);
+
                 ctx.font = 'bold 120px Inter';
                 ctx.textAlign = 'center';
                 ctx.textBaseline = 'middle';
                 ctx.fillStyle = red;
                 ctx.fillText("GAME OVER!", center_x, center_y - 180);
+
                 ctx.font = '36px Inter';
                 ctx.fillStyle = white;
                 ctx.fillText(`Profile: ${current_profile} (${current_difficulty_mode.toUpperCase()})`, center_x, center_y - 110);
+
                 let restart_y_offset;
+                const currentWinThreshold = WIN_THRESHOLD_TIMES[current_difficulty_mode];
+                const didWin = final_survival_time >= currentWinThreshold;
+
                 if (is_new_high_score) {
                     ctx.font = 'bold 70px Inter';
                     ctx.fillStyle = gold;
                     const best_combined_text = `NEW BEST: ${final_survival_time.toFixed(2)} seconds!`;
                     ctx.fillText(best_combined_text, center_x, center_y - 20);
                     restart_y_offset = 100;
-                } else {
+                } else { // Not a new high score
                     ctx.font = '50px Inter';
                     ctx.fillStyle = white;
                     const final_time_text = `Your Time: ${final_survival_time.toFixed(2)} seconds!`;
                     ctx.fillText(final_time_text, center_x, center_y - 40);
-                    ctx.font = '50px Inter';
-                    ctx.fillStyle = gold;
-                    const best_score_text_to_display = `Your Best (${current_difficulty_mode.toUpperCase()}): ${currentProfileHighScore.toFixed(2)} seconds!`;
-                    ctx.fillText(best_score_text_to_display, center_x, center_y + 20);
-                    restart_y_offset = 120;
+
+                    if (!didWin) { // If they did NOT win/level up
+                        ctx.font = '40px Inter';
+                        ctx.fillStyle = gold;
+                        const time_needed = currentWinThreshold - final_survival_time;
+                        ctx.fillText(`You needed ${time_needed.toFixed(2)} more seconds to level up!`, center_x, center_y + 20);
+                        restart_y_offset = 120;
+                    } else { // They won, but it wasn't a NEW high score
+                        // The 'nextGameMessage' below will handle the "LEVEL UP!" message
+                        restart_y_offset = 80; // Adjust offset if no "needed more time" message
+                    }
+                }
+
+                let nextGameMessage = "";
+                if (didWin) {
+                    const currentIndex = DIFFICULTIES_ORDER.indexOf(current_difficulty_mode);
+                    const nextIndex = currentIndex + 1;
+
+                    if (nextIndex < DIFFICULTIES_ORDER.length) {
+                        current_difficulty_mode = DIFFICULTIES_ORDER[nextIndex]; // Set next difficulty
+                        nextGameMessage = `LEVEL UP! Moving to ${current_difficulty_mode.toUpperCase()}!`;
+                        ctx.fillStyle = gold;
+                    } else {
+                        nextGameMessage = `YOU HAVE LEVELED UP ALL THE WAY!`;
+                        ctx.fillStyle = gold;
+                        // User has beaten the impossible mode, stays on impossible for replays
+                    }
+                } else {
+                    nextGameMessage = `TRY AGAIN!`; // Simplified, as "needed more time" is explicitly shown above
+                    // current_difficulty_mode remains the same
+                    ctx.fillStyle = white;
                 }
                 ctx.font = '40px Inter';
+                ctx.fillText(nextGameMessage, center_x, center_y + restart_y_offset + 50);
+
+                ctx.font = '40px Inter';
                 ctx.fillStyle = white;
-                ctx.fillText("Press R to Restart (" + current_difficulty_mode.toUpperCase() + ")", center_x, center_y + restart_y_offset);
-                ctx.fillText("Press P to Change Profile", center_x, center_y + restart_y_offset + 50);
+                ctx.fillText("Press R to Continue", center_x, center_y + restart_y_offset + 120);
+                ctx.fillText("Press P to Change Profile", center_x, center_y + restart_y_offset + 170);
+
+                // --- Rickroll Logic ---
+                // Rickroll if on babymode, died quickly, but have a high score on babymode (meaning you should be better)
+                if (current_difficulty_mode === 'babymode' && final_survival_time < 10 && loadHighScore(current_profile, 'babymode') > 20) {
+                    showRickroll();
+                } else {
+                    hideRickroll();
+                }
+                // --- End Rickroll Logic ---
             }
         }
 
         window.onload = function() {
             console.log('Window loaded, initializing game...');
-            resizeCanvas();
+            resizeCanvas(); // Initial call to set canvas size and screen_width/height
             loadProfiles();
             showProfileSelect();
             requestAnimationFrame(gameLoop);
