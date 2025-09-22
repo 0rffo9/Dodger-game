@@ -1,10 +1,4 @@
-in order to run Dodger 
-
-install git
-
-git clone https://github.com/0rffo9/Dodger-game.git
-
-ask https://gemini.google.com/ how run
+git clone https://github.com/0rffo9/Dodger-game
 
 HAVE FUN!
 
